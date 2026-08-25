@@ -234,3 +234,8 @@ input[type=color]{width:34px;height:34px;border:none;background:none;padding:0;b
   .sheet-backdrop{justify-content:center;}
   .sheet-panel,.tool-sheet{max-width:520px;margin:0 auto;}
 }
+.screen[hidden],
+.sheet-backdrop[hidden],
+.tool-sheet[hidden]{
+  display:none !important;
+}
