@@ -1,17 +1,18 @@
-import { useConvexAuth } from "convex/react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState } from "react";
 
 export function useAuth() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const [user, setUser] = useState<any>(null);
+  const token = localStorage.getItem("authToken") || undefined;
+  const user = useQuery(api.users.getCurrentUser, { token });
+  const isLoading = token !== undefined && user === undefined;
+  const isAuthenticated = !!user;
 
-  const signOut = useMutation(api.users.signOut);
+  const signOutMutation = useMutation(api.users.signOut);
 
   const handleSignOut = async () => {
-    await signOut();
-    setUser(null);
+    await signOutMutation();
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("authEmail");
   };
 
   return {
