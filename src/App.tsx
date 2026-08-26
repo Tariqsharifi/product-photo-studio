@@ -10,7 +10,7 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 function App() {
   return (
     <ConvexProvider client={convex}>
-      <BrowserRouter>
+     <BrowserRouter basename="/product-photo-studio">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
