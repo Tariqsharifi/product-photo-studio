@@ -157,7 +157,7 @@ export default function PhotoEditor() {
           <div className="space-y-4">
             <div>
               <label className="text-sm text-gray-600">روشنایی: {brightness}%</label>
-              <Slider value={[brightness]} onValueChange={(v) => setBrightness(v[0])} min={0} max={200} />
+      <Slider value={[brightness]} onValueChange={(v: number[]) => setBrightness(v[0])} min={0} max={200} />
             </div>
             <div>
               <label className="text-sm text-gray-600">کنتراست: {contrast}%</label>
