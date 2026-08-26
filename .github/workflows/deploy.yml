@@ -37,6 +37,11 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
 
+      - name: Generate Convex files
+        run: npx convex codegen --typecheck=disable
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
       - name: Deploy Convex and Build
         run: npx convex deploy --cmd 'npm run build'
         env:
