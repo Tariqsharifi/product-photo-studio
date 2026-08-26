@@ -25,7 +25,8 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-                - name: Install dependencies
+
+      - name: Install dependencies
         run: npm install
 
       - name: Deploy Convex and Build
