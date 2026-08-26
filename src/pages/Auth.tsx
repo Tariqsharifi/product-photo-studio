@@ -32,21 +32,23 @@ export default function Auth() {
     setIsLoading(false);
   };
 
-  const handleCodeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code) return;
-    
-    setIsLoading(true);
-    try {
-      await verifyCode({ email, code });
-      const from = (location.state as any)?.from?.pathname || "/dashboard";
-      navigate(from);
-    } catch (error) {
-      console.error(error);
-    }
-    setIsLoading(false);
-  };
-
+ const handleCodeSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!code) return;
+  
+  setIsLoading(true);
+  try {
+    const result = await verifyCode({ email, code });
+    localStorage.setItem("authToken", result.token);
+    localStorage.setItem("authEmail", email);
+    const from = (location.state as any)?.from?.pathname || "/dashboard";
+    navigate(from);
+  } catch (error) {
+    console.error(error);
+  }
+  setIsLoading(false);
+};
+ 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8">
