@@ -12,6 +12,7 @@
     "@convex-dev/auth": "^0.0.90",
     "@hookform/resolvers": "^5.2.2",
     "@imgly/background-removal": "^1.7.0",
+    "@radix-ui/react-slider": "^1.2.3",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tabs": "^1.1.13",
     "@tailwindcss/vite": "^4.1.17",
