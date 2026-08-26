@@ -25,12 +25,13 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-
-      - name: Install dependencies
+                - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build
+      - name: Deploy Convex and Build
+        run: npx convex deploy --cmd 'npm run build'
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
