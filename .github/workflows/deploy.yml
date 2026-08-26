@@ -27,6 +27,15 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+      - name: Check secret
+        run: |
+          if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+            echo "Secret is EMPTY or NOT SET"
+          else
+            echo "Secret length is: ${#CONVEX_DEPLOY_KEY}"
+          fi
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
 
       - name: Deploy Convex and Build
         run: npx convex deploy --cmd 'npm run build'
