@@ -15,7 +15,8 @@ export default function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  const signIn = useMutation(api.users.signIn);
+  const signIn = useAction(api.users.signIn);
+  
   const verifyCode = useMutation(api.users.verifyCode);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
