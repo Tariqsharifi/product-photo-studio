@@ -1,22 +1,20 @@
 import { v } from "convex/values";
-import { mutation, query, action, internalMutation, internalQuery } from "./_generated/server";
+import { mutation, query, action, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-// این اکشن هست که واقعاً ایمیل می‌فرسته (اکشن‌ها می‌تونن به اینترنت وصل بشن، mutation نمی‌تونه)
 export const signIn = action({
   args: { email: v.string() },
   handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const codeExpiry = Date.now() + 10 * 60 * 1000;
 
-    // کد رو توی دیتابیس ذخیره کن
     await ctx.runMutation(internal.users.saveCode, {
-      email: args.email,
+      email,
       code,
       codeExpiry,
     });
 
-    // ایمیل رو با Resend بفرست
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -25,7 +23,7 @@ export const signIn = action({
       },
       body: JSON.stringify({
         from: "PhotoCut <onboarding@resend.dev>",
-        to: [args.email],
+        to: [email],
         subject: "کد ورود به PhotoCut",
         html: `<div dir="rtl" style="font-family: sans-serif;">
           <h2>کد ورود شما</h2>
@@ -64,9 +62,10 @@ export const saveCode = internalMutation({
 export const verifyCode = mutation({
   args: { email: v.string(), code: v.string() },
   handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
     const user = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
 
     if (!user || user.code !== args.code) {
@@ -78,15 +77,31 @@ export const verifyCode = mutation({
     }
 
     const token = crypto.randomUUID();
-    await ctx.db.patch(user._id, { token, code: undefined, codeExpiry: undefined });
+
+    await ctx.db.insert("sessions", {
+      token,
+      userId: user._id,
+      createdAt: Date.now(),
+    });
+
+    await ctx.db.patch(user._id, { code: undefined, codeExpiry: undefined });
 
     return { token, userId: user._id };
   },
 });
 
 export const signOut = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { token: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (args.token) {
+      const session = await ctx.db
+        .query("sessions")
+        .withIndex("by_token", (q) => q.eq("token", args.token!))
+        .first();
+      if (session) {
+        await ctx.db.delete(session._id);
+      }
+    }
     return { success: true };
   },
 });
@@ -95,6 +110,11 @@ export const getCurrentUser = query({
   args: { token: v.optional(v.string()) },
   handler: async (ctx, args) => {
     if (!args.token) return null;
-    return await ctx.db.query("users").withIndex("by_token", (q) => q.eq("token", args.token)).first();
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token!))
+      .first();
+    if (!session) return null;
+    return await ctx.db.get(session.userId);
   },
 });
