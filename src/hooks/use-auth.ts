@@ -8,9 +8,9 @@ export function useAuth() {
   const isAuthenticated = !!user;
 
   const signOutMutation = useMutation(api.users.signOut);
-
-  const handleSignOut = async () => {
-    await signOutMutation();
+const handleSignOut = async () => {
+    const token = localStorage.getItem("authToken") || undefined;
+    await signOutMutation({ token });
     localStorage.removeItem("authToken");
     localStorage.removeItem("authEmail");
   };
