@@ -10,4 +10,9 @@ export default defineSchema({
     codeExpiry: v.optional(v.number()),
   }).index("by_email", ["email"])
     .index("by_token", ["token"]),
+  sessions: defineTable({
+    token: v.string(),
+    userId: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_token", ["token"]),
 });
