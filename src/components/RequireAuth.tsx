@@ -16,8 +16,16 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/auth" state={{ from: location }} replace />;
+    if (!isAuthenticated) {
+    return (
+      <div style={{ padding: 20, fontSize: 14, wordBreak: "break-all" }}>
+        <p>⚠️ توکن پیدا نشد یا کاربر تایید نشد</p>
+        <p>مقدار توکن توی حافظه: {debugToken ? debugToken : "❌ خالیه (چیزی ذخیره نشده)"}</p>
+        <button onClick={() => (window.location.href = "/product-photo-studio/auth")} style={{ marginTop: 10, padding: "8px 16px" }}>
+          برو صفحه ورود
+        </button>
+      </div>
+    );
   }
 
   return <>{children}</>;
