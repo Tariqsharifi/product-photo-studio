@@ -341,6 +341,15 @@ export default function BackgroundRemover() {
       document.body.removeChild(link);
     }
   };
+const handleDownloadAllIndividually = async () => {
+  const processedImages = images.filter((img) => img.status === "done");
+  if (processedImages.length === 0) return;
+
+  for (let i = 0; i < processedImages.length; i++) {
+    handleDownloadSingle(processedImages[i]);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+};
 
   const handleDownloadAll = async () => {
     const processedImages = images.filter((img) => img.status === "done");
