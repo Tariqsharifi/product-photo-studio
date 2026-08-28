@@ -18,15 +18,16 @@ export default function Auth() {
   const signIn = useAction(api.users.signIn);
   
   const verifyCode = useMutation(api.users.verifyCode);
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!code) return;
     
     setIsLoading(true);
     try {
-      await signIn({ email });
-      setStep("code");
+      const result = await verifyCode({ email, code });
+      localStorage.setItem("authToken", result.token);
+      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      navigate(from);
     } catch (error) {
       console.error(error);
     }
