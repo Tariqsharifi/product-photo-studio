@@ -450,7 +450,13 @@ const handleDownloadAllIndividually = async () => {
               دانلود همه (ZIP)
             </Button>
           )}
-          
+                    {doneCount > 0 && (
+            <Button onClick={handleDownloadAllIndividually} size="sm" variant="outline">
+              <Download className="w-4 h-4 ml-1" />
+              ذخیره همه در گالری
+            </Button>
+          )}
+
           <Button onClick={handleClearAll} size="sm" variant="ghost">
             <Trash2 className="w-4 h-4" />
           </Button>
