@@ -347,6 +347,83 @@ const handleDownloadAllIndividually = async () => {
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || 
+    (window.navigator as any).standalone === true;
+
+  if (navigator.share && navigator.canShare) {
+    try {
+      const files = await Promise.all(
+        processedImages.map(async (img, index) => {
+          const response = await fetch(img.processed!);
+          const blob = await response.blob();
+          return new File([blob], `product-${index + 1}-${img.name}`, { type: "image/png" });
+        })
+      );
+
+      if (navigator.canShare({ files })) {
+        await navigator.share({ files });
+        return;
+      }
+    } catch (error) {
+      console.error("Share failed, falling back:", error);
+    }
+  }
+
+  // اگر داخل اپ نصب‌شده (PWA) هستیم، هرگز صفحه‌ی جدید باز نکن چون از اپ خارج میشه
+  if (isIOS && !isStandalone) {
+    const imagesHtml = processedImages
+      .map(
+        (img) => `
+        <div class="photo-block">
+          <img src="${img.processed}" alt="${img.name}" />
+        </div>
+      `
+      )
+      .join("");
+
+    const newWindow = window.open("", "_blank");
+    if (newWindow) {
+      newWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>PhotoCut - ذخیره همه</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body { margin: 0; padding: 10px; background: #f5f5f5; font-family: -apple-system, sans-serif; }
+            .tip { background: #e8f5e9; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; color: #2e7d32; text-align: center; position: sticky; top: 0; }
+            .photo-block { margin-bottom: 20px; text-align: center; }
+            .photo-block img { max-width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+          </style>
+        </head>
+        <body>
+          <div class="tip">💡 روی هر عکس انگشتتون رو نگه دارید → ذخیره در تصاویر</div>
+          ${imagesHtml}
+        </body>
+        </html>
+      `);
+      newWindow.document.close();
+    }
+  } else {
+    // برای اندروید و برای PWA نصب‌شده روی آیفون: دانلود مستقیم بدون خروج از اپ
+    processedImages.forEach((image, index) => {
+      setTimeout(() => {
+        const link = document.createElement("a");
+        link.download = `product-${image.name}`;
+        link.href = image.processed!;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }, index * 500);
+    });
+  }
+};
+
+  const processedImages = images.filter((img) => img.status === "done");
+  if (processedImages.length === 0) return;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   if (navigator.share && navigator.canShare) {
     try {
