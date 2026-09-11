@@ -12,45 +12,48 @@ export default function Auth() {
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const signIn = useAction(api.users.signIn);
-  
   const verifyCode = useMutation(api.users.verifyCode);
-  const handleCodeSubmit = async (e: React.FormEvent) => {
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code) return;
-    
+    if (!email) return;
+
     setIsLoading(true);
+    setErrorMsg("");
     try {
-      const result = await verifyCode({ email, code });
-      localStorage.setItem("authToken", result.token);
-      const from = (location.state as any)?.from?.pathname || "/dashboard";
-      navigate(from);
+      await signIn({ email });
+      setStep("code");
     } catch (error) {
       console.error(error);
+      setErrorMsg("ارسال ایمیل ناموفق بود. دوباره امتحان کن.");
     }
     setIsLoading(false);
   };
 
- const handleCodeSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!code) return;
-  
-  setIsLoading(true);
-  try {
-    const result = await verifyCode({ email, code });
-    localStorage.setItem("authToken", result.token);
-    localStorage.setItem("authEmail", email);
-    const from = (location.state as any)?.from?.pathname || "/dashboard";
-    navigate(from);
-  } catch (error) {
-    console.error(error);
-  }
-  setIsLoading(false);
-};
- 
+  const handleCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code) return;
+
+    setIsLoading(true);
+    setErrorMsg("");
+    try {
+      const result = await verifyCode({ email, code });
+      localStorage.setItem("authToken", result.token);
+      localStorage.setItem("authEmail", email);
+      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      navigate(from);
+    } catch (error) {
+      console.error(error);
+      setErrorMsg("کد اشتباه است یا منقضی شده.");
+    }
+    setIsLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8">
@@ -61,6 +64,12 @@ export default function Auth() {
           <h1 className="text-2xl font-bold text-gray-900">ورود به PhotoCut</h1>
           <p className="text-gray-500 mt-2">حساب کاربری ندارید؟ خودکار ساخته میشه!</p>
         </div>
+
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center">
+            {errorMsg}
+          </div>
+        )}
 
         {step === "email" ? (
           <form onSubmit={handleEmailSubmit} className="space-y-4">
@@ -80,8 +89,8 @@ export default function Auth() {
                 />
               </div>
             </div>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
               disabled={isLoading || !email}
             >
@@ -105,16 +114,16 @@ export default function Auth() {
                 dir="ltr"
               />
             </div>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
               disabled={isLoading || code.length < 6}
             >
               {isLoading ? "در حال تایید..." : "تایید و ورود"}
             </Button>
-            <Button 
-              type="button" 
-              variant="ghost" 
+            <Button
+              type="button"
+              variant="ghost"
               className="w-full"
               onClick={() => setStep("email")}
             >
