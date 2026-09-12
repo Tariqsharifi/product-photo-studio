@@ -28,6 +28,7 @@ interface ImageItem {
 
 const backgroundPresets: { id: BackgroundPreset; name: string; preview: string }[] = [
   { id: "white", name: "سفید", preview: "bg-white" },
+  { id: "black", name: "مشکی خالص", preview: "bg-black" },
   { id: "light-gray", name: "خاکستری روشن", preview: "bg-gray-100" },
   { id: "dark-gray", name: "خاکستری تیره", preview: "bg-gray-700" },
   { id: "studio-dark", name: "استودیو تیره", preview: "bg-gradient-to-b from-gray-800 to-gray-900" },
