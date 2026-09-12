@@ -7,6 +7,7 @@ import JSZip from "jszip";
 
 type BackgroundPreset = 
   | "white" 
+  | "black"
   | "light-gray" 
   | "dark-gray" 
   | "studio-dark" 
