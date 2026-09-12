@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { removeBackground } from "@imgly/background-removal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,6 +22,7 @@ interface ImageItem {
   id: string;
   name: string;
   original: string;
+  removedForeground: string | null;
   processed: string | null;
   status: "pending" | "processing" | "done" | "error";
 }
@@ -63,6 +64,7 @@ export default function BackgroundRemover() {
           id: `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
           name: file.name,
           original: dataUrl,
+          removedForeground: null,
           processed: null,
           status: "pending",
         });
@@ -103,8 +105,7 @@ export default function BackgroundRemover() {
   };
 
   const drawBackground = (ctx: CanvasRenderingContext2D, width: number, height: number, preset: BackgroundPreset) => {
-    
-          switch (preset) {
+    switch (preset) {
       case "white":
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, width, height);
@@ -114,7 +115,7 @@ export default function BackgroundRemover() {
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, 0, width, height);
         break;
-  
+        
       case "light-gray":
         ctx.fillStyle = "#f3f4f6";
         ctx.fillRect(0, 0, width, height);
@@ -217,34 +218,30 @@ export default function BackgroundRemover() {
     }
   };
 
-  const processImage = async (imageItem: ImageItem): Promise<string | null> => {
+  // مرحله ۱ (سنگین): فقط حذف پس‌زمینه با AI، بدون رنگ‌آمیزی — نتیجه یک PNG شفافه
+  const removeForegroundOnly = async (imageItem: ImageItem): Promise<string | null> => {
     try {
       const response = await fetch(imageItem.original);
       const blob = await response.blob();
-      
+
       const resultBlob = await removeBackground(blob, {
         progress: (key: string, current: number, total: number) => {
           console.log(`${key}: ${Math.round(current / total * 100)}%`);
         }
       });
-      
-      const img = new window.Image();
+
       const url = URL.createObjectURL(resultBlob);
-      
       return new Promise((resolve) => {
+        const img = new window.Image();
         img.onload = () => {
           const canvas = document.createElement("canvas");
           canvas.width = img.width;
           canvas.height = img.height;
           const ctx = canvas.getContext("2d")!;
-          
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          drawBackground(ctx, canvas.width, canvas.height, selectedBackground);
           ctx.drawImage(img, 0, 0);
-          
-          const result = canvas.toDataURL("image/png", 1.0);
+          const dataUrl = canvas.toDataURL("image/png", 1.0);
           URL.revokeObjectURL(url);
-          resolve(result);
+          resolve(dataUrl);
         };
         img.onerror = () => {
           URL.revokeObjectURL(url);
@@ -253,10 +250,53 @@ export default function BackgroundRemover() {
         img.src = url;
       });
     } catch (error) {
-      console.error("Error processing image:", error);
+      console.error("Error removing background:", error);
       return null;
     }
   };
+
+  // مرحله ۲ (سبک و سریع): چسباندن رنگ پس‌زمینه به عکس شفاف — بدون نیاز به AI دوباره
+  const compositeWithBackground = (foregroundDataUrl: string, preset: BackgroundPreset): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBackground(ctx, canvas.width, canvas.height, preset);
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png", 1.0));
+      };
+      img.onerror = () => resolve(null);
+      img.src = foregroundDataUrl;
+    });
+  };
+
+  // هر وقت رنگ پس‌زمینه عوض شد، عکس‌های قبلاً آماده رو فوراً با رنگ جدید به‌روز کن
+  // (بدون نیاز به اجرای دوباره AI — چون همون عکس شفاف قبلی cache شده)
+  useEffect(() => {
+    const hasDoneImages = images.some((img) => img.status === "done" && img.removedForeground);
+    if (!hasDoneImages) return;
+
+    let cancelled = false;
+    const recomposite = async () => {
+      const updated = await Promise.all(
+        images.map(async (img) => {
+          if (img.status === "done" && img.removedForeground) {
+            const newProcessed = await compositeWithBackground(img.removedForeground, selectedBackground);
+            return { ...img, processed: newProcessed || img.processed };
+          }
+          return img;
+        })
+      );
+      if (!cancelled) setImages(updated);
+    };
+    recomposite();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBackground]);
 
   const handleProcessSingle = async (imageId: string) => {
     const image = images.find((img) => img.id === imageId);
@@ -267,12 +307,21 @@ export default function BackgroundRemover() {
       prev.map((img) => (img.id === imageId ? { ...img, status: "processing" } : img))
     );
 
-    const result = await processImage(image);
+    const foreground = await removeForegroundOnly(image);
+    if (!foreground) {
+      setImages((prev) =>
+        prev.map((img) => (img.id === imageId ? { ...img, status: "error" } : img))
+      );
+      setIsProcessing(false);
+      return;
+    }
+
+    const composited = await compositeWithBackground(foreground, selectedBackground);
 
     setImages((prev) =>
       prev.map((img) =>
         img.id === imageId
-          ? { ...img, processed: result, status: result ? "done" : "error" }
+          ? { ...img, removedForeground: foreground, processed: composited, status: composited ? "done" : "error" }
           : img
       )
     );
@@ -295,12 +344,19 @@ export default function BackgroundRemover() {
         prev.map((img) => (img.id === image.id ? { ...img, status: "processing" } : img))
       );
 
-      const result = await processImage(image);
+      const foreground = await removeForegroundOnly(image);
+      if (!foreground) {
+        setImages((prev) =>
+          prev.map((img) => (img.id === image.id ? { ...img, status: "error" } : img))
+        );
+        continue;
+      }
+      const composited = await compositeWithBackground(foreground, selectedBackground);
 
       setImages((prev) =>
         prev.map((img) =>
           img.id === image.id
-            ? { ...img, processed: result, status: result ? "done" : "error" }
+            ? { ...img, removedForeground: foreground, processed: composited, status: composited ? "done" : "error" }
             : img
         )
       );
@@ -349,83 +405,82 @@ export default function BackgroundRemover() {
       document.body.removeChild(link);
     }
   };
-const handleDownloadAllIndividually = async () => {
-  const processedImages = images.filter((img) => img.status === "done");
-  if (processedImages.length === 0) return;
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || 
-    (window.navigator as any).standalone === true;
+  const handleDownloadAllIndividually = async () => {
+    const processedImages = images.filter((img) => img.status === "done");
+    if (processedImages.length === 0) return;
 
-  if (navigator.share && navigator.canShare) {
-    try {
-      const files = await Promise.all(
-        processedImages.map(async (img, index) => {
-          const response = await fetch(img.processed!);
-          const blob = await response.blob();
-          return new File([blob], `product-${index + 1}-${img.name}`, { type: "image/png" });
-        })
-      );
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || 
+      (window.navigator as any).standalone === true;
 
-      if (navigator.canShare({ files })) {
-        await navigator.share({ files });
-        return;
+    if (navigator.share && navigator.canShare) {
+      try {
+        const files = await Promise.all(
+          processedImages.map(async (img, index) => {
+            const response = await fetch(img.processed!);
+            const blob = await response.blob();
+            return new File([blob], `product-${index + 1}-${img.name}`, { type: "image/png" });
+          })
+        );
+
+        if (navigator.canShare({ files })) {
+          await navigator.share({ files });
+          return;
+        }
+      } catch (error) {
+        console.error("Share failed, falling back:", error);
       }
-    } catch (error) {
-      console.error("Share failed, falling back:", error);
     }
-  }
 
-  // اگر داخل اپ نصب‌شده (PWA) هستیم، هرگز صفحه‌ی جدید باز نکن چون از اپ خارج میشه
-  if (isIOS && !isStandalone) {
-    const imagesHtml = processedImages
-      .map(
-        (img) => `
-        <div class="photo-block">
-          <img src="${img.processed}" alt="${img.name}" />
-        </div>
-      `
-      )
-      .join("");
+    if (isIOS && !isStandalone) {
+      const imagesHtml = processedImages
+        .map(
+          (img) => `
+          <div class="photo-block">
+            <img src="${img.processed}" alt="${img.name}" />
+          </div>
+        `
+        )
+        .join("");
 
-    const newWindow = window.open("", "_blank");
-    if (newWindow) {
-      newWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>PhotoCut - ذخیره همه</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <style>
-            body { margin: 0; padding: 10px; background: #f5f5f5; font-family: -apple-system, sans-serif; }
-            .tip { background: #e8f5e9; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; color: #2e7d32; text-align: center; position: sticky; top: 0; }
-            .photo-block { margin-bottom: 20px; text-align: center; }
-            .photo-block img { max-width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-          </style>
-        </head>
-        <body>
-          <div class="tip">💡 روی هر عکس انگشتتون رو نگه دارید → ذخیره در تصاویر</div>
-          ${imagesHtml}
-        </body>
-        </html>
-      `);
-      newWindow.document.close();
+      const newWindow = window.open("", "_blank");
+      if (newWindow) {
+        newWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>PhotoCut - ذخیره همه</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body { margin: 0; padding: 10px; background: #f5f5f5; font-family: -apple-system, sans-serif; }
+              .tip { background: #e8f5e9; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; color: #2e7d32; text-align: center; position: sticky; top: 0; }
+              .photo-block { margin-bottom: 20px; text-align: center; }
+              .photo-block img { max-width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+            </style>
+          </head>
+          <body>
+            <div class="tip">💡 روی هر عکس انگشتتون رو نگه دارید → ذخیره در تصاویر</div>
+            ${imagesHtml}
+          </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
+     } else {
+      processedImages.forEach((image, index) => {
+        setTimeout(() => {
+          const link = document.createElement("a");
+          link.download = `product-${image.name}`;
+          link.href = image.processed!;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }, index * 500);
+      });
     }
-   } else {
-    // برای اندروید و برای PWA نصب‌شده روی آیفون: دانلود مستقیم بدون خروج از اپ
-    processedImages.forEach((image, index) => {
-      setTimeout(() => {
-        const link = document.createElement("a");
-        link.download = `product-${image.name}`;
-        link.href = image.processed!;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }, index * 500);
-    });
-  }
-};
+  };
 
   const handleDownloadAll = async () => {
     const processedImages = images.filter((img) => img.status === "done");
