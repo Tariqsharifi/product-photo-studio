@@ -103,12 +103,18 @@ export default function BackgroundRemover() {
   };
 
   const drawBackground = (ctx: CanvasRenderingContext2D, width: number, height: number, preset: BackgroundPreset) => {
-    switch (preset) {
+    
+          switch (preset) {
       case "white":
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, width, height);
         break;
-        
+
+      case "black":
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, width, height);
+        break;
+  
       case "light-gray":
         ctx.fillStyle = "#f3f4f6";
         ctx.fillRect(0, 0, width, height);
