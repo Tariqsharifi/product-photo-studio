@@ -2,7 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Image as ImageIcon, Sparkles, Film } from "lucide-react";
 import PhotoEditor from "@/components/PhotoEditor";
 import BackgroundRemover from "@/components/BackgroundRemover";
-import VideoMaker from "@/components/VideoMaker";
+import VideoStudio from "@/components/VideoStudio";
 import InstallGuide from "@/components/InstallGuide";
 
 export default function Dashboard() {
@@ -45,7 +45,7 @@ export default function Dashboard() {
           </TabsContent>
 
           <TabsContent value="video" className="mt-4">
-            <VideoMaker />
+            <VideoStudio />
           </TabsContent>
         </Tabs>
       </div>
