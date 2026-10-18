@@ -209,10 +209,24 @@ function drawCaption(ctx: CanvasRenderingContext2D, text: string, yFrac: number,
   ctx.restore();
 }
 
-const HIDDEN_STYLE = "position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
+function isBlank(ctx: CanvasRenderingContext2D): boolean {
+  try {
+    for (let gx = 1; gx <= 5; gx++) {
+      for (let gy = 1; gy <= 5; gy++) {
+        const d = ctx.getImageData(Math.floor((W * gx) / 6), Math.floor((H * gy) / 6), 1, 1).data;
+        if (d[0] + d[1] + d[2] > 15) return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-// کلیپ‌ها را پشت سر هم پخش و روی یک بوم ضبط می‌کند تا یک ویدیوی واحد شود
+// کلیپ‌ها را پشت سر هم پخش و روی بوم (که روی صفحه دیده می‌شود) ضبط می‌کند تا یک ویدیوی واحد شود
 async function stitchClips(
+  canvas: HTMLCanvasElement,
+  stage: HTMLElement,
   urls: string[],
   title: string,
   cta: string,
@@ -221,13 +235,7 @@ async function stitchClips(
   const mime = pickMime();
   if (!mime) throw new Error("no-recorder");
 
-  const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H;
-  canvas.style.cssText = HIDDEN_STYLE;
-  document.body.appendChild(canvas);
   const ctx = canvas.getContext("2d")!;
-
   const videos: HTMLVideoElement[] = [];
 
   try {
@@ -243,9 +251,9 @@ async function stitchClips(
       v.playsInline = true;
       v.setAttribute("playsinline", "");
       v.preload = "auto";
-      v.style.cssText = HIDDEN_STYLE;
+      v.style.cssText = "width:48px;height:85px;object-fit:cover;border-radius:4px";
       v.src = u;
-      document.body.appendChild(v);
+      stage.appendChild(v);
       videos.push(v);
       await new Promise<void>((resolve, reject) => {
         const t = setTimeout(() => reject(new Error("load-timeout")), 20000);
@@ -262,6 +270,9 @@ async function stitchClips(
     }
 
     const totalDur = videos.reduce((sum, v) => sum + (v.duration || 0), 0) || 1;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+
     const stream = canvas.captureStream(30);
     const chunks: BlobPart[] = [];
     const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4_000_000 });
@@ -274,7 +285,9 @@ async function stitchClips(
     recorder.start();
 
     let doneDur = 0;
-    for (let i = 0; i < videos.length; i++) {
+    let blank = false;
+    let checked = false;
+    for (let i = 0; i < videos.length && !blank; i++) {
       const v = videos[i];
       await new Promise<void>((resolve) => {
         let raf = 0;
@@ -293,13 +306,24 @@ async function stitchClips(
         };
         const draw = () => {
           if (finished) return;
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, W, H);
-          drawCover(ctx, v);
-          const t = v.currentTime;
-          if (i === 0 && title.trim()) drawCaption(ctx, title, 0.78, 54, "#ffffff", clamp(t / 0.5));
-          if (i === videos.length - 1 && cta.trim()) drawCaption(ctx, cta, 0.78, 46, "#fde68a", clamp(t / 0.5));
-          onProgress(clamp((doneDur + t) / totalDur));
+          if (v.readyState >= 2) {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, W, H);
+            drawCover(ctx, v);
+            const t = v.currentTime;
+            if (i === 0 && title.trim()) drawCaption(ctx, title, 0.78, 54, "#ffffff", clamp(t / 0.5));
+            if (i === videos.length - 1 && cta.trim()) drawCaption(ctx, cta, 0.78, 46, "#fde68a", clamp(t / 0.5));
+            onProgress(clamp((doneDur + t) / totalDur));
+            if (!checked && i === 0 && t > 0.6) {
+              checked = true;
+              if (isBlank(ctx)) {
+                blank = true;
+                clearTimeout(guard);
+                finish();
+                return;
+              }
+            }
+          }
           raf = requestAnimationFrame(draw);
         };
         v.currentTime = 0;
@@ -315,6 +339,8 @@ async function stitchClips(
     await stopped;
     stream.getTracks().forEach((tr) => tr.stop());
 
+    if (blank) throw new Error("blank-frames");
+
     const realType = (recorder.mimeType || mime).split(";")[0] || "video/mp4";
     const blob = new Blob(chunks, { type: realType });
     if (blob.size === 0) throw new Error("empty");
@@ -325,7 +351,6 @@ async function stitchClips(
       v.removeAttribute("src");
       v.remove();
     });
-    canvas.remove();
   }
 }
 
@@ -339,6 +364,8 @@ export default function ProductStoryGenerator() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   const [photo, setPhoto] = useState<{ base64: string; previewUrl: string } | null>(null);
   const [productText, setProductText] = useState("");
@@ -522,13 +549,22 @@ export default function ProductStoryGenerator() {
         for (const u of ordered) {
           blobUrls.push(await loadClipBlobUrl(u, accessCode, fetchClip));
         }
-        const out = await stitchClips(blobUrls, title, cta, (p) => setStitchPct(Math.round(p * 100)));
+        await sleep(200);
+        const canvasEl = canvasRef.current;
+        const stageEl = stageRef.current;
+        if (!canvasEl || !stageEl) throw new Error("no-stage");
+        const out = await stitchClips(canvasEl, stageEl, blobUrls, title, cta, (p) => setStitchPct(Math.round(p * 100)));
         if (cancelRef.current) return;
         setFinalVideo({ url: URL.createObjectURL(out.blob), blob: out.blob, ext: out.ext });
         setPhase("done");
       } catch (err) {
         console.error(err);
-        setError("چسباندن صحنه‌ها ناموفق بود. می‌توانید هر صحنه را جدا از فهرست پایین باز و ذخیره کنید.");
+        const blankFrames = err instanceof Error && err.message === "blank-frames";
+        setError(
+          blankFrames
+            ? "مرورگر تصویر کلیپ‌ها را برای چسباندن نداد. هر صحنه را از «وضعیت صحنه‌ها» با «باز کردن» ذخیره کنید و در CapCut یا InShot به هم بچسبانید."
+            : "چسباندن صحنه‌ها ناموفق بود. می‌توانید هر صحنه را از «وضعیت صحنه‌ها» جدا باز و ذخیره کنید."
+        );
         setPhase("error");
       } finally {
         blobUrls.forEach((b) => URL.revokeObjectURL(b));
@@ -702,8 +738,8 @@ export default function ProductStoryGenerator() {
       {/* نتیجه */}
       <div className="space-y-4">
         <Card className="overflow-hidden">
-          <div className="bg-gray-900 p-2 flex justify-center items-center min-h-[240px]">
-            {finalVideo ? (
+          <div className="bg-gray-900 p-2 flex flex-col items-center justify-center min-h-[240px]">
+            {finalVideo && (
               <video
                 key={finalVideo.url}
                 src={finalVideo.url}
@@ -712,13 +748,26 @@ export default function ProductStoryGenerator() {
                 loop
                 className="w-auto h-auto max-h-[60vh] max-w-full rounded-md"
               />
-            ) : (
+            )}
+            {/* بوم باید همیشه در صفحه باشد؛ فقط هنگام چسباندن دیده می‌شود */}
+            <canvas
+              ref={canvasRef}
+              width={W}
+              height={H}
+              className={phase === "stitching" ? "w-auto h-auto max-h-[60vh] max-w-full rounded-md" : "hidden"}
+              style={{ aspectRatio: "9 / 16" }}
+            />
+            <div ref={stageRef} className={phase === "stitching" ? "flex gap-1 p-2" : "hidden"} />
+            {!finalVideo && phase === "stitching" && (
+              <p className="text-gray-300 text-sm p-2">در حال چسباندن صحنه‌ها… {stitchPct}٪ — صفحه را باز نگه دارید.</p>
+            )}
+            {!finalVideo && phase !== "stitching" && (
               <div className="text-center text-gray-400 text-sm p-6 leading-7">
                 {busy ? (
                   <>
                     <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-purple-400" />
                     <p>{statusText}</p>
-                    {phase === "stitching" ? <p>{stitchPct}٪</p> : <p>{elapsed} ثانیه گذشته</p>}
+                    <p>{elapsed} ثانیه گذشته</p>
                     <p className="text-xs mt-2">این صفحه را باز نگه دارید و صفحه‌ی گوشی را خاموش نکنید.</p>
                   </>
                 ) : (
